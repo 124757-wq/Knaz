@@ -116,11 +116,11 @@ const server = http.createServer((req, res) => {
         const urlParts = req.url.split('/');
         
         // /api/player/{steamId}
-        if (urlParts[2] === 'player' && urlParts[3]) {
+        if (urlParts[2] === 'player' && urlParts[3] && !urlParts[4]) {
             const steamId = urlParts[3];
             const query = `
-                query GetPlayer($steamId: Long!) {
-                    player(steamAccountId: $steamId) {
+                query {
+                    player(steamAccountId: ${steamId}) {
                         steamAccount {
                             id
                             name
@@ -135,7 +135,7 @@ const server = http.createServer((req, res) => {
                     }
                 }
             `;
-            proxyStratzRequest(query, { steamId: parseInt(steamId) }, res);
+            proxyStratzRequest(query, {}, res);
             return;
         }
         
@@ -143,8 +143,8 @@ const server = http.createServer((req, res) => {
         if (urlParts[2] === 'player' && urlParts[3] && urlParts[4] === 'heroes') {
             const steamId = urlParts[3];
             const query = `
-                query GetPlayerHeroes($steamId: Long!) {
-                    player(steamAccountId: $steamId) {
+                query {
+                    player(steamAccountId: ${steamId}) {
                         heroesPerformance {
                             heroId
                             matchCount
@@ -153,7 +153,7 @@ const server = http.createServer((req, res) => {
                     }
                 }
             `;
-            proxyStratzRequest(query, { steamId: parseInt(steamId) }, res);
+            proxyStratzRequest(query, {}, res);
             return;
         }
         
@@ -161,13 +161,13 @@ const server = http.createServer((req, res) => {
         if (urlParts[2] === 'player' && urlParts[3] && urlParts[4] === 'matches') {
             const steamId = urlParts[3];
             const query = `
-                query GetPlayerMatches($steamId: Long!) {
-                    player(steamAccountId: $steamId) {
+                query {
+                    player(steamAccountId: ${steamId}) {
                         matches(request: { take: 10 }) {
                             id
                             didRadiantWin
                             durationSeconds
-                            players(steamAccountId: $steamId) {
+                            players(steamAccountId: ${steamId}) {
                                 isRadiant
                                 heroId
                                 kills
@@ -178,14 +178,14 @@ const server = http.createServer((req, res) => {
                     }
                 }
             `;
-            proxyStratzRequest(query, { steamId: parseInt(steamId) }, res);
+            proxyStratzRequest(query, {}, res);
             return;
         }
         
         // /api/heroes - список героев
         if (urlParts[2] === 'heroes') {
             const query = `
-                query GetHeroes {
+                query {
                     constants {
                         heroes {
                             id
