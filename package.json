@@ -1,0 +1,12 @@
+{
+  "name": "dota2-stats",
+  "version": "1.0.0",
+  "description": "Сайт статистики Dota 2 игроков",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": ["dota2", "stats", "opendota"],
+  "author": "pro20",
+  "license": "MIT"
+}
