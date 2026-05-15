@@ -1,198 +1,137 @@
-// API OpenDota (через наш сервер)
+// API Stratz (\u0447\u0435\u0440\u0435\u0437 \u043d\u0430\u0448 \u0441\u0435\u0440\u0432\u0435\u0440)
 const API_BASE = '/api';
 
-// Словарь героев (будет загружен из API)
+// \u0421\u043b\u043e\u0432\u0430\u0440\u044c \u0433\u0435\u0440\u043e\u0435\u0432
 let heroesData = {};
 
-// Загрузка списка героев при старте
+// \u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430 \u0441\u043f\u0438\u0441\u043a\u0430 \u0433\u0435\u0440\u043e\u0435\u0432 \u043f\u0440\u0438 \u0441\u0442\u0430\u0440\u0442\u0435
 async function loadHeroes() {
     try {
         const response = await fetch(`${API_BASE}/heroes`);
-        const heroes = await response.json();
+        const data = await response.json();
         
-        // Создаем словарь: id -> имя героя
-        heroes.forEach(hero => {
-            heroesData[hero.id] = hero.localized_name;
-        });
+        if (data.data && data.data.constants && data.data.constants.heroes) {
+            data.data.constants.heroes.forEach(hero => {
+                heroesData[hero.id] = hero.displayName;
+            });
+            console.log('\u2705 \u0413\u0435\u0440\u043e\u0438 \u0437\u0430\u0433\u0440\u0443\u0436\u0435\u043d\u044b:', Object.keys(heroesData).length);
+        }
     } catch (error) {
-        console.error('Ошибка загрузки героев:', error);
-    }
-}
+        console.error('\u041e\u0448\u0438\u0431\u043a\u0430 \u0437\u0430\u0433\u0440\u0443\u0437\u043a\u0438 \u0433\u0435\u0440\u043e\u0435\u0432:', error);
+    }\n}
 
-// Получение имени героя по ID
+// \u041f\u043e\u043b\u0443\u0447\u0435\u043d\u0438\u0435 \u0438\u043c\u0435\u043d\u0438 \u0433\u0435\u0440\u043e\u044f \u043f\u043e ID
 function getHeroName(heroId) {
-    return heroesData[heroId] || `Hero #${heroId}`;
-}
+    return heroesData[heroId] || `Hero #${heroId}`;\n}
 
-// Поиск игрока
+// \u041f\u043e\u0438\u0441\u043a \u0438\u0433\u0440\u043e\u043a\u0430
 async function searchPlayer() {
     const input = document.getElementById('playerInput').value.trim();
     
     if (!input) {
-        alert('Введите Steam ID или ID профиля');
+        alert('\u0412\u0432\u0435\u0434\u0438\u0442\u0435 Steam ID');
         return;
     }
 
-    // Показываем загрузку
+    // \u041f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0435\u043c \u0437\u0430\u0433\u0440\u0443\u0437\u043a\u0443
     showLoading();
     hideError();
     hideProfile();
 
     try {
-        console.log('Поиск игрока:', input);
+        console.log('\u041f\u043e\u0438\u0441\u043a \u0438\u0433\u0440\u043e\u043a\u0430:', input);
         
-        // Получаем данные игрока
-        const playerData = await fetchPlayerData(input);
+        // \u041f\u043e\u043b\u0443\u0447\u0430\u0435\u043c \u0434\u0430\u043d\u043d\u044b\u0435 \u0438\u0433\u0440\u043e\u043a\u0430
+        const playerResponse = await fetch(`${API_BASE}/player/${input}`);
+        const playerData = await playerResponse.json();
         
-        if (!playerData || !playerData.profile) {
-            console.error('Данные игрока не получены');
-            showError('Игрок не найден. Проверьте правильность ID.');
+        if (!playerData.data || !playerData.data.player) {
+            console.error('\u0418\u0433\u0440\u043e\u043a \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d');
+            showError('\u0418\u0433\u0440\u043e\u043a \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d. \u041f\u0440\u043e\u0432\u0435\u0440\u044c\u0442\u0435 Steam ID.');
             return;
         }
 
-        console.log('Данные игрока получены:', playerData.profile.personaname);
+        const player = playerData.data.player;
+        console.log('\u0414\u0430\u043d\u043d\u044b\u0435 \u0438\u0433\u0440\u043e\u043a\u0430:', player);
 
-        // Получаем статистику побед/поражений
-        const winLoss = await fetchWinLoss(input);
-        console.log('W/L получено:', winLoss);
+        // \u041f\u043e\u043b\u0443\u0447\u0430\u0435\u043c \u0442\u043e\u043f \u0433\u0435\u0440\u043e\u0435\u0432
+        const heroesResponse = await fetch(`${API_BASE}/player/${input}/heroes`);
+        const heroesData = await heroesResponse.json();
+        const topHeroes = heroesData.data?.player?.heroesPerformance?.slice(0, 6) || [];
         
-        // Получаем топ героев
-        const topHeroes = await fetchTopHeroes(input);
-        console.log('Топ героев получено:', topHeroes.length);
-        
-        // Получаем последние матчи
-        const recentMatches = await fetchRecentMatches(input);
-        console.log('Матчи получены:', recentMatches.length);
+        // \u041f\u043e\u043b\u0443\u0447\u0430\u0435\u043c \u043f\u043e\u0441\u043b\u0435\u0434\u043d\u0438\u0435 \u043c\u0430\u0442\u0447\u0438
+        const matchesResponse = await fetch(`${API_BASE}/player/${input}/matches`);
+        const matchesData = await matchesResponse.json();
+        const recentMatches = matchesData.data?.player?.matches || [];
 
-        // Отображаем все данные
-        displayPlayerProfile(playerData, winLoss, topHeroes, recentMatches);
+        // \u041e\u0442\u043e\u0431\u0440\u0430\u0436\u0430\u0435\u043c \u0432\u0441\u0435 \u0434\u0430\u043d\u043d\u044b\u0435
+        displayPlayerProfile(player, topHeroes, recentMatches);
         
     } catch (error) {
-        console.error('Ошибка при поиске:', error);
-        showError(`Произошла ошибка: ${error.message}`);
-    } finally {
+        console.error('\u041e\u0448\u0438\u0431\u043a\u0430 \u043f\u0440\u0438 \u043f\u043e\u0438\u0441\u043a\u0435:', error);
+        showError(`\u041f\u0440\u043e\u0438\u0437\u043e\u0448\u043b\u0430 \u043e\u0448\u0438\u0431\u043a\u0430: ${error.message}`);\n    } finally {
         hideLoading();
     }
 }
 
-// Получение данных игрока
-async function fetchPlayerData(playerId) {
-    try {
-        const url = `${API_BASE}/players/${playerId}`;
-        console.log('Запрос к:', url);
-        
-        const response = await fetch(url);
-        console.log('Статус ответа:', response.status);
-        
-        if (!response.ok) {
-            console.error('Ошибка HTTP:', response.status);
-            return null;
-        }
-        
-        const data = await response.json();
-        console.log('Получены данные:', data);
-        return data;
-    } catch (error) {
-        console.error('Ошибка получения данных игрока:', error);
-        throw error;
-    }
-}
-
-// Получение статистики побед/поражений
-async function fetchWinLoss(playerId) {
-    try {
-        const response = await fetch(`${API_BASE}/players/${playerId}/wl`);
-        return await response.json();
-    } catch (error) {
-        console.error('Ошибка получения W/L:', error);
-        return { win: 0, lose: 0 };
-    }
-}
-
-// Получение топ героев
-async function fetchTopHeroes(playerId) {
-    try {
-        const response = await fetch(`${API_BASE}/players/${playerId}/heroes`);
-        const heroes = await response.json();
-        // Возвращаем топ-6 героев по количеству игр
-        return heroes.slice(0, 6);
-    } catch (error) {
-        console.error('Ошибка получения героев:', error);
-        return [];
-    }
-}
-
-// Получение последних матчей
-async function fetchRecentMatches(playerId) {
-    try {
-        const response = await fetch(`${API_BASE}/players/${playerId}/recentMatches`);
-        const matches = await response.json();
-        // Возвращаем последние 10 матчей
-        return matches.slice(0, 10);
-    } catch (error) {
-        console.error('Ошибка получения матчей:', error);
-        return [];
-    }
-}
-
-// Отображение профиля игрока
-function displayPlayerProfile(player, winLoss, topHeroes, recentMatches) {
-    // Основная информация
-    document.getElementById('playerAvatar').src = player.profile.avatarfull;
-    document.getElementById('playerName').textContent = player.profile.personaname || 'Неизвестный игрок';
+// \u041e\u0442\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u0435 \u043f\u0440\u043e\u0444\u0438\u043b\u044f \u0438\u0433\u0440\u043e\u043a\u0430
+function displayPlayerProfile(player, topHeroes, recentMatches) {
+    // \u041e\u0441\u043d\u043e\u0432\u043d\u0430\u044f \u0438\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0438\u044f
+    document.getElementById('playerAvatar').src = player.steamAccount?.avatar || 'https://via.placeholder.com/100';
+    document.getElementById('playerName').textContent = player.steamAccount?.name || '\u041d\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u043d\u044b\u0439 \u0438\u0433\u0440\u043e\u043a';
     
-    // Ранг (если есть)
-    const rankTier = player.rank_tier;
-    if (rankTier) {
-        const rank = Math.floor(rankTier / 10);
-        const stars = rankTier % 10;
-        document.getElementById('playerRank').textContent = `Ранг: ${getRankName(rank)} [${stars}★]`;
-    } else {
-        document.getElementById('playerRank').textContent = 'Ранг: Не откалиброван';
+    // \u0420\u0430\u043d\u0433
+    const rank = player.ranks?.rank || null;
+    if (rank) {
+        document.getElementById('playerRank').textContent = `\u0420\u0430\u043d\u0433: ${getRankName(rank)}`;\n    } else {
+        document.getElementById('playerRank').textContent = '\u0420\u0430\u043d\u0433: \u041d\u0435 \u043e\u0442\u043a\u0430\u043b\u0438\u0431\u0440\u043e\u0432\u0430\u043d';
     }
 
-    // Статистика
-    const totalGames = winLoss.win + winLoss.lose;
-    const winRate = totalGames > 0 ? ((winLoss.win / totalGames) * 100).toFixed(1) : 0;
+    // \u0421\u0442\u0430\u0442\u0438\u0441\u0442\u0438\u043a\u0430
+    const wins = player.winCount || 0;
+    const losses = player.lossCount || 0;
+    const totalGames = wins + losses;
+    const winRate = totalGames > 0 ? ((wins / totalGames) * 100).toFixed(1) : 0;
 
     document.getElementById('winRate').textContent = `${winRate}%`;
     document.getElementById('totalGames').textContent = totalGames;
-    document.getElementById('wins').textContent = winLoss.win;
-    document.getElementById('losses').textContent = winLoss.lose;
+    document.getElementById('wins').textContent = wins;
+    document.getElementById('losses').textContent = losses;
 
-    // Топ героев
+    // \u0422\u043e\u043f \u0433\u0435\u0440\u043e\u0435\u0432
     displayTopHeroes(topHeroes);
 
-    // Последние матчи
+    // \u041f\u043e\u0441\u043b\u0435\u0434\u043d\u0438\u0435 \u043c\u0430\u0442\u0447\u0438
     displayRecentMatches(recentMatches);
 
-    // Показываем профиль
+    // \u041f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0435\u043c \u043f\u0440\u043e\u0444\u0438\u043b\u044c
     showProfile();
 }
 
-// Отображение топ героев
+// \u041e\u0442\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u0435 \u0442\u043e\u043f \u0433\u0435\u0440\u043e\u0435\u0432
 function displayTopHeroes(heroes) {
     const container = document.getElementById('topHeroes');
     container.innerHTML = '';
 
     heroes.forEach(hero => {
-        const totalGames = hero.games;
-        const winRate = ((hero.win / totalGames) * 100).toFixed(1);
+        const totalGames = hero.matchCount || 0;
+        const wins = hero.winCount || 0;
+        const winRate = totalGames > 0 ? ((wins / totalGames) * 100).toFixed(1) : 0;
         
         const heroCard = document.createElement('div');
         heroCard.className = 'hero-card';
         heroCard.innerHTML = `
-            <h4>${getHeroName(hero.hero_id)}</h4>
+            <h4>${getHeroName(hero.heroId)}</h4>
             <div class="hero-stats">
-                <span>Игр:</span>
+                <span>\u0418\u0433\u0440:</span>
                 <span class="value">${totalGames}</span>
             </div>
             <div class="hero-stats">
-                <span>Побед:</span>
-                <span class="value">${hero.win}</span>
+                <span>\u041f\u043e\u0431\u0435\u0434:</span>
+                <span class="value">${wins}</span>
             </div>
             <div class="hero-stats">
-                <span>Винрейт:</span>
+                <span>\u0412\u0438\u043d\u0440\u0435\u0439\u0442:</span>
                 <span class="value">${winRate}%</span>
             </div>
             <div class="hero-winrate">
@@ -204,27 +143,30 @@ function displayTopHeroes(heroes) {
     });
 }
 
-// Отображение последних матчей
+// \u041e\u0442\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u0435 \u043f\u043e\u0441\u043b\u0435\u0434\u043d\u0438\u0445 \u043c\u0430\u0442\u0447\u0435\u0432
 function displayRecentMatches(matches) {
     const container = document.getElementById('recentMatches');
     container.innerHTML = '';
 
     matches.forEach(match => {
-        const isWin = (match.player_slot < 128 && match.radiant_win) || 
-                      (match.player_slot >= 128 && !match.radiant_win);
+        const playerData = match.players?.[0];
+        if (!playerData) return;
         
-        const duration = formatDuration(match.duration);
-        const kda = `${match.kills}/${match.deaths}/${match.assists}`;
+        const isRadiant = playerData.isRadiant;
+        const isWin = (isRadiant && match.didRadiantWin) || (!isRadiant && !match.didRadiantWin);
+        
+        const duration = formatDuration(match.durationSeconds);
+        const kda = `${playerData.kills}/${playerData.deaths}/${playerData.assists}`;
         
         const matchCard = document.createElement('div');
         matchCard.className = `match-card ${isWin ? 'win' : 'loss'}`;
         matchCard.innerHTML = `
             <div class="match-info">
                 <div class="match-result ${isWin ? 'win' : 'loss'}">
-                    ${isWin ? 'ПОБЕДА' : 'ПОРАЖЕНИЕ'}
+                    ${isWin ? '\u041f\u041e\u0411\u0415\u0414\u0410' : '\u041f\u041e\u0420\u0410\u0416\u0415\u041d\u0418\u0415'}
                 </div>
                 <div>
-                    <div class="match-hero">${getHeroName(match.hero_id)}</div>
+                    <div class="match-hero">${getHeroName(playerData.heroId)}</div>
                     <div class="match-kda">KDA: ${kda}</div>
                 </div>
             </div>
@@ -235,29 +177,27 @@ function displayRecentMatches(matches) {
     });
 }
 
-// Получение названия ранга
+// \u041f\u043e\u043b\u0443\u0447\u0435\u043d\u0438\u0435 \u043d\u0430\u0437\u0432\u0430\u043d\u0438\u044f \u0440\u0430\u043d\u0433\u0430
 function getRankName(rank) {
-    const ranks = {
-        1: 'Herald',
-        2: 'Guardian',
-        3: 'Crusader',
-        4: 'Archon',
-        5: 'Legend',
-        6: 'Ancient',
-        7: 'Divine',
-        8: 'Immortal'
-    };
-    return ranks[rank] || 'Неизвестен';
+    if (rank >= 80) return 'Immortal';
+    if (rank >= 70) return 'Divine';
+    if (rank >= 60) return 'Ancient';
+    if (rank >= 50) return 'Legend';
+    if (rank >= 40) return 'Archon';
+    if (rank >= 30) return 'Crusader';
+    if (rank >= 20) return 'Guardian';
+    if (rank >= 10) return 'Herald';
+    return '\u041d\u0435\u0438\u0437\u0432\u0435\u0441\u0442\u0435\u043d';
 }
 
-// Форматирование длительности матча
+// \u0424\u043e\u0440\u043c\u0430\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435 \u0434\u043b\u0438\u0442\u0435\u043b\u044c\u043d\u043e\u0441\u0442\u0438 \u043c\u0430\u0442\u0447\u0430
 function formatDuration(seconds) {
     const minutes = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${minutes}:${secs.toString().padStart(2, '0')}`;
 }
 
-// Функции показа/скрытия элементов
+// \u0424\u0443\u043d\u043a\u0446\u0438\u0438 \u043f\u043e\u043a\u0430\u0437\u0430/\u0441\u043a\u0440\u044b\u0442\u0438\u044f \u044d\u043b\u0435\u043c\u0435\u043d\u0442\u043e\u0432
 function showLoading() {
     document.getElementById('loading').classList.remove('hidden');
 }
@@ -269,7 +209,7 @@ function hideLoading() {
 function showError(message) {
     const errorElement = document.getElementById('error');
     if (message) {
-        errorElement.querySelector('p').textContent = `❌ ${message}`;
+        errorElement.querySelector('p').textContent = `\u274c ${message}`;
     }
     errorElement.classList.remove('hidden');
 }
@@ -286,12 +226,12 @@ function hideProfile() {
     document.getElementById('playerProfile').classList.add('hidden');
 }
 
-// Поиск по нажатию Enter
+// \u041f\u043e\u0438\u0441\u043a \u043f\u043e \u043d\u0430\u0436\u0430\u0442\u0438\u044e Enter
 document.addEventListener('DOMContentLoaded', () => {
-    // Загружаем героев при старте
+    // \u0417\u0430\u0433\u0440\u0443\u0436\u0430\u0435\u043c \u0433\u0435\u0440\u043e\u0435\u0432 \u043f\u0440\u0438 \u0441\u0442\u0430\u0440\u0442\u0435
     loadHeroes();
 
-    // Обработчик Enter в поле ввода
+    // \u041e\u0431\u0440\u0430\u0431\u043e\u0442\u0447\u0438\u043a Enter \u0432 \u043f\u043e\u043b\u0435 \u0432\u0432\u043e\u0434\u0430
     document.getElementById('playerInput').addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
             searchPlayer();

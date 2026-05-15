@@ -5,7 +5,8 @@ const https = require('https');
 const demoData = require('./demoData');
 
 const PORT = 3000;
-const USE_DEMO_MODE = true; // Включить демо-режим при недоступности API
+const USE_DEMO_MODE = false; // Используем реальный Stratz API
+const STRATZ_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJTdWJqZWN0IjoiZmFhMDQ3ZjMtNTI2Yi00NjRlLTg1N2MtMjRkZDBjOTM5NDExIiwiU3RlYW1JZCI6IjEwNjU4NDYyNzgiLCJBUElVc2VyIjoidHJ1ZSIsIm5iZiI6MTc3ODg4NDQzNywiZXhwIjoxODEwNDIwNDM3LCJpYXQiOjE3Nzg4ODQ0MzcsImlzcyI6Imh0dHBzOi8vYXBpLnN0cmF0ei5jb20ifQ.kqZb7X2IAZWj6UY8keNWIzDtZtmRopAFn5duzLE0UA8';
 
 // MIME типы для разных файлов
 const mimeTypes = {
@@ -20,60 +21,31 @@ const mimeTypes = {
     '.ico': 'image/x-icon'
 };
 
-// Функция для проксирования запросов к OpenDota API с повторными попытками
-function proxyApiRequest(apiPath, res, retryCount = 0) {
-    // Демо-режим: возвращаем тестовые данные
-    if (USE_DEMO_MODE) {
-        console.log(`🎭 ДЕМО-РЕЖИМ: ${apiPath}`);
-        
-        let demoResponse = null;
-        
-        if (apiPath.includes('/heroes')) {
-            demoResponse = demoData.demoHeroes;
-        } else if (apiPath.includes('/players/') && apiPath.includes('/wl')) {
-            demoResponse = demoData.demoWinLoss;
-        } else if (apiPath.includes('/players/') && apiPath.includes('/heroes')) {
-            demoResponse = demoData.demoTopHeroes;
-        } else if (apiPath.includes('/players/') && apiPath.includes('/recentMatches')) {
-            demoResponse = demoData.demoRecentMatches;
-        } else if (apiPath.includes('/players/')) {
-            demoResponse = demoData.demoPlayerData;
-        }
-        
-        if (demoResponse) {
-            // Имитируем задержку сети
-            setTimeout(() => {
-                res.writeHead(200, {
-                    'Content-Type': 'application/json',
-                    'Access-Control-Allow-Origin': '*'
-                });
-                res.end(JSON.stringify(demoResponse));
-            }, 500);
-            return;
-        }
-    }
-    
-    const maxRetries = 2;
-    const retryDelay = 2000; // 2 секунды
-    
-    // Проверяем, не был ли уже отправлен ответ
+// Функция для проксирования запросов к Stratz GraphQL API
+function proxyStratzRequest(query, variables, res) {
     if (res.headersSent) {
-        console.log('⚠️ Ответ уже отправлен, пропускаем запрос');
+        console.log('⚠️ Ответ уже отправлен');
         return;
     }
 
+    const postData = JSON.stringify({
+        query: query,
+        variables: variables
+    });
+
     const options = {
-        hostname: 'api.opendota.com',
-        path: `/api${apiPath}`,
-        method: 'GET',
+        hostname: 'api.stratz.com',
+        path: '/graphql',
+        method: 'POST',
         headers: {
-            'User-Agent': 'Dota2StatsApp/1.0',
-            'Accept': 'application/json'
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${STRATZ_TOKEN}`,
+            'Content-Length': Buffer.byteLength(postData)
         },
-        timeout: 15000 // 15 секунд таймаут
+        timeout: 15000
     };
 
-    console.log(`📡 API запрос: ${apiPath} (попытка ${retryCount + 1}/${maxRetries + 1})`);
+    console.log(`📡 Stratz API запрос`);
 
     const apiReq = https.request(options, (apiRes) => {
         let data = '';
@@ -85,84 +57,53 @@ function proxyApiRequest(apiPath, res, retryCount = 0) {
         apiRes.on('end', () => {
             if (res.headersSent) return;
             
-            // Проверяем, что получили валидный JSON
             try {
-                JSON.parse(data);
-                console.log(`✅ API ответ получен: ${apiPath}`);
+                const parsed = JSON.parse(data);
+                console.log(`✅ Stratz API ответ получен`);
                 res.writeHead(200, {
                     'Content-Type': 'application/json',
                     'Access-Control-Allow-Origin': '*'
                 });
                 res.end(data);
             } catch (e) {
-                console.error(`❌ Невалидный JSON от API: ${data.substring(0, 100)}`);
-                
-                // Если это ошибка 522 и есть попытки - повторяем
-                if (retryCount < maxRetries && data.includes('error code: 522')) {
-                    console.log(`🔄 Повтор через ${retryDelay}мс...`);
-                    setTimeout(() => {
-                        proxyApiRequest(apiPath, res, retryCount + 1);
-                    }, retryDelay);
-                } else {
-                    res.writeHead(503, {
-                        'Content-Type': 'application/json',
-                        'Access-Control-Allow-Origin': '*'
-                    });
-                    res.end(JSON.stringify({ 
-                        error: 'OpenDota API временно недоступен',
-                        details: 'Попробуйте через несколько минут'
-                    }));
-                }
+                console.error(`❌ Ошибка парсинга JSON:`, e);
+                res.writeHead(500, {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                });
+                res.end(JSON.stringify({ 
+                    error: 'Ошибка обработки данных'
+                }));
             }
         });
     });
 
     apiReq.on('error', (error) => {
         if (res.headersSent) return;
-        
-        console.error('❌ Ошибка API запроса:', error.message);
-        
-        // Повторяем при ошибке сети
-        if (retryCount < maxRetries) {
-            console.log(`🔄 Повтор через ${retryDelay}мс...`);
-            setTimeout(() => {
-                proxyApiRequest(apiPath, res, retryCount + 1);
-            }, retryDelay);
-        } else {
-            res.writeHead(503, { 
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
-            });
-            res.end(JSON.stringify({ 
-                error: 'Не удалось подключиться к OpenDota API',
-                details: 'Сервис временно недоступен. Попробуйте позже.'
-            }));
-        }
+        console.error('❌ Ошибка Stratz API:', error.message);
+        res.writeHead(503, { 
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*'
+        });
+        res.end(JSON.stringify({ 
+            error: 'Не удалось подключиться к Stratz API'
+        }));
     });
 
     apiReq.on('timeout', () => {
         if (res.headersSent) return;
-        
-        console.error('⏱️ Таймаут запроса к API');
+        console.error('⏱️ Таймаут Stratz API');
         apiReq.destroy();
-        
-        if (retryCount < maxRetries) {
-            console.log(`🔄 Повтор через ${retryDelay}мс...`);
-            setTimeout(() => {
-                proxyApiRequest(apiPath, res, retryCount + 1);
-            }, retryDelay);
-        } else {
-            res.writeHead(504, { 
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
-            });
-            res.end(JSON.stringify({ 
-                error: 'Таймаут запроса к API',
-                details: 'OpenDota API не отвечает. Попробуйте позже.'
-            }));
-        }
+        res.writeHead(504, { 
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*'
+        });
+        res.end(JSON.stringify({ 
+            error: 'Таймаут запроса'
+        }));
     });
 
+    apiReq.write(postData);
     apiReq.end();
 }
 
@@ -172,8 +113,94 @@ const server = http.createServer((req, res) => {
 
     // Если запрос к API - проксируем его
     if (req.url.startsWith('/api/')) {
-        const apiPath = req.url.replace('/api', '');
-        proxyApiRequest(apiPath, res);
+        const urlParts = req.url.split('/');
+        
+        // /api/player/{steamId}
+        if (urlParts[2] === 'player' && urlParts[3]) {
+            const steamId = urlParts[3];
+            const query = `
+                query GetPlayer($steamId: Long!) {
+                    player(steamAccountId: $steamId) {
+                        steamAccount {
+                            id
+                            name
+                            avatar
+                        }
+                        ranks {
+                            rank
+                        }
+                        winCount
+                        lossCount
+                        matchCount
+                    }
+                }
+            `;
+            proxyStratzRequest(query, { steamId: parseInt(steamId) }, res);
+            return;
+        }
+        
+        // /api/player/{steamId}/heroes
+        if (urlParts[2] === 'player' && urlParts[3] && urlParts[4] === 'heroes') {
+            const steamId = urlParts[3];
+            const query = `
+                query GetPlayerHeroes($steamId: Long!) {
+                    player(steamAccountId: $steamId) {
+                        heroesPerformance {
+                            heroId
+                            matchCount
+                            winCount
+                        }
+                    }
+                }
+            `;
+            proxyStratzRequest(query, { steamId: parseInt(steamId) }, res);
+            return;
+        }
+        
+        // /api/player/{steamId}/matches
+        if (urlParts[2] === 'player' && urlParts[3] && urlParts[4] === 'matches') {
+            const steamId = urlParts[3];
+            const query = `
+                query GetPlayerMatches($steamId: Long!) {
+                    player(steamAccountId: $steamId) {
+                        matches(request: { take: 10 }) {
+                            id
+                            didRadiantWin
+                            durationSeconds
+                            players(steamAccountId: $steamId) {
+                                isRadiant
+                                heroId
+                                kills
+                                deaths
+                                assists
+                            }
+                        }
+                    }
+                }
+            `;
+            proxyStratzRequest(query, { steamId: parseInt(steamId) }, res);
+            return;
+        }
+        
+        // /api/heroes - список героев
+        if (urlParts[2] === 'heroes') {
+            const query = `
+                query GetHeroes {
+                    constants {
+                        heroes {
+                            id
+                            displayName
+                        }
+                    }
+                }
+            `;
+            proxyStratzRequest(query, {}, res);
+            return;
+        }
+        
+        // Неизвестный эндпоинт
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'API endpoint not found' }));
         return;
     }
 
