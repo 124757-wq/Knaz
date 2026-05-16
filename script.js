@@ -93,8 +93,8 @@ function displayPlayerProfile(player, topHeroes, recentMatches) {
 
     // Статистика
     const wins = player.winCount || 0;
-    const losses = player.lossCount || 0;
-    const totalGames = wins + losses;
+    const totalGames = player.matchCount || 0;
+    const losses = totalGames - wins;
     const winRate = totalGames > 0 ? ((wins / totalGames) * 100).toFixed(1) : 0;
 
     document.getElementById('winRate').textContent = `${winRate}%`;

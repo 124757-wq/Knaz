@@ -40,15 +40,19 @@ function proxyStratzRequest(query, variables, res) {
         headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${STRATZ_TOKEN}`,
+            'User-Agent': 'Dota2StatsApp/1.0',
             'Content-Length': Buffer.byteLength(postData)
         },
         timeout: 15000
     };
 
     console.log(`📡 Stratz API запрос`);
+    console.log('Query:', query.substring(0, 100));
 
     const apiReq = https.request(options, (apiRes) => {
         let data = '';
+
+        console.log('Статус ответа:', apiRes.statusCode);
 
         apiRes.on('data', (chunk) => {
             data += chunk;
@@ -57,8 +61,25 @@ function proxyStratzRequest(query, variables, res) {
         apiRes.on('end', () => {
             if (res.headersSent) return;
             
+            console.log('Получен ответ:', data.substring(0, 200));
+            
             try {
                 const parsed = JSON.parse(data);
+                
+                // Проверяем на ошибки GraphQL
+                if (parsed.errors) {
+                    console.error('❌ GraphQL ошибки:', parsed.errors);
+                    res.writeHead(400, {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    });
+                    res.end(JSON.stringify({ 
+                        error: 'GraphQL error',
+                        details: parsed.errors
+                    }));
+                    return;
+                }
+                
                 console.log(`✅ Stratz API ответ получен`);
                 res.writeHead(200, {
                     'Content-Type': 'application/json',
@@ -67,12 +88,14 @@ function proxyStratzRequest(query, variables, res) {
                 res.end(data);
             } catch (e) {
                 console.error(`❌ Ошибка парсинга JSON:`, e);
+                console.error('Полученные данные:', data);
                 res.writeHead(500, {
                     'Content-Type': 'application/json',
                     'Access-Control-Allow-Origin': '*'
                 });
                 res.end(JSON.stringify({ 
-                    error: 'Ошибка обработки данных'
+                    error: 'Ошибка обработки данных',
+                    details: data.substring(0, 200)
                 }));
             }
         });
@@ -86,7 +109,8 @@ function proxyStratzRequest(query, variables, res) {
             'Access-Control-Allow-Origin': '*'
         });
         res.end(JSON.stringify({ 
-            error: 'Не удалось подключиться к Stratz API'
+            error: 'Не удалось подключиться к Stratz API',
+            details: error.message
         }));
     });
 
@@ -130,7 +154,6 @@ const server = http.createServer((req, res) => {
                             rank
                         }
                         winCount
-                        lossCount
                         matchCount
                     }
                 }
